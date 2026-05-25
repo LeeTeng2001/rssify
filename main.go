@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/LeeTeng2001/rssify/cmd/serve"
 	"github.com/LeeTeng2001/rssify/cmd/version"
 	"github.com/urfave/cli/v3"
 )
@@ -28,6 +29,7 @@ func main() {
 			},
 		},
 		Commands: []*cli.Command{
+			serve.Command(),
 			version.Command(os.Stdout),
 		},
 	}
