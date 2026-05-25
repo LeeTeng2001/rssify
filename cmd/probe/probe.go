@@ -1,15 +1,18 @@
 package probe
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/url"
+	"os"
 	"strings"
 	"text/tabwriter"
 
+	"github.com/LeeTeng2001/rssify/internal/ai"
 	"github.com/LeeTeng2001/rssify/internal/config"
 	"github.com/LeeTeng2001/rssify/internal/extract"
 	"github.com/LeeTeng2001/rssify/internal/fetch"
@@ -146,6 +149,113 @@ func truncate(s string, n int) string {
 	return s[:n-1] + "…"
 }
 
+const suggestSystemPrompt = "You generate rssify TOML rule blocks. Output only a fenced TOML block with [feed.rule], item, title, link, optional description, optional pub_date. CSS selectors are default; prefix xpath: for XPath. Do not include explanation."
+
 func runSuggest(ctx context.Context, c *cli.Command) error {
-	return errors.New("AI suggest mode not yet implemented")
+	cfg, err := config.Load(c.String("config"))
+	if err != nil {
+		return err
+	}
+
+	baseURL, apiKey, model := resolveAI(cfg)
+	if apiKey == "" || model == "" {
+		return errors.New("AI is not configured")
+	}
+
+	args := c.Args().Slice()
+	if len(args) != 1 {
+		return errors.New("usage: rssify probe --suggest <url>")
+	}
+
+	fetcher := fetch.NewClient(cfg.Server.UserAgent, cfg.Server.FetchTimeout)
+	body, finalURL, err := fetcher.Get(ctx, args[0])
+	if err != nil {
+		return err
+	}
+
+	htmlLimit := c.Int("html-bytes")
+	promptHTML := string(body)
+	if htmlLimit > 0 && len(body) > htmlLimit {
+		promptHTML = string(body[:htmlLimit])
+	}
+
+	aiClient := ai.New(baseURL, apiKey, model)
+	msgs := []ai.Message{
+		{Role: "system", Content: suggestSystemPrompt},
+		{Role: "user", Content: fmt.Sprintf("URL: %s\n\nHTML:\n%s", finalURL.String(), promptHTML)},
+	}
+
+	for {
+		result, err := aiClient.Complete(ctx, msgs)
+		if err != nil {
+			return fmt.Errorf("AI request failed: %w", err)
+		}
+
+		ruleText, err := extractFencedTOML(result)
+		if err != nil {
+			fmt.Fprintf(c.ErrWriter, "error: %v\n", err)
+			msgs = append(msgs,
+				ai.Message{Role: "assistant", Content: result},
+				ai.Message{Role: "user", Content: "Your response did not contain a fenced TOML block. Output only a fenced TOML block."},
+			)
+			continue
+		}
+
+		rule, err := config.ParseRuleTOML(ruleText)
+		if err != nil {
+			fmt.Fprintf(c.ErrWriter, "error: %v\n", err)
+			msgs = append(msgs,
+				ai.Message{Role: "assistant", Content: result},
+				ai.Message{Role: "user", Content: fmt.Sprintf("The TOML block has a validation error: %v. Fix the rule.", err)},
+			)
+			continue
+		}
+
+		fmt.Fprintf(c.ErrWriter, "%s\n", ruleText)
+		return outputExtracted(c.Writer, c.ErrWriter, c.Bool("json"), c.Int("limit"), body, finalURL, rule)
+	}
+}
+
+func resolveAI(cfg *config.Config) (baseURL, apiKey, model string) {
+	baseURL = cfg.AI.BaseURL
+	apiKey = cfg.AI.APIKey
+	model = cfg.AI.Model
+	if baseURL == "" {
+		baseURL = os.Getenv("OPENAI_BASE_URL")
+	}
+	if apiKey == "" {
+		apiKey = os.Getenv("OPENAI_API_KEY")
+	}
+	if model == "" {
+		model = os.Getenv("OPENAI_MODEL")
+	}
+	return baseURL, apiKey, model
+}
+
+func readLine(r io.Reader) string {
+	scanner := bufio.NewScanner(r)
+	if scanner.Scan() {
+		return strings.TrimSpace(scanner.Text())
+	}
+	return ""
+}
+
+func extractFencedTOML(s string) ([]byte, error) {
+	openIdx := strings.Index(s, "```")
+	if openIdx == -1 {
+		return nil, errors.New("no fenced block found")
+	}
+	afterOpen := s[openIdx+3:]
+	if strings.HasPrefix(afterOpen, "toml") {
+		afterOpen = afterOpen[4:]
+	}
+	if strings.HasPrefix(afterOpen, "\n") {
+		afterOpen = afterOpen[1:]
+	}
+	closeIdx := strings.Index(afterOpen, "```")
+	if closeIdx == -1 {
+		return nil, errors.New("fenced block is unterminated")
+	}
+	content := strings.TrimSpace(afterOpen[:closeIdx])
+	return []byte(content), nil
 }

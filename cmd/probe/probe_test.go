@@ -39,3 +39,24 @@ func TestLimitItems(t *testing.T) {
 		t.Errorf("limit 0: got %d items, want 2", len(got))
 	}
 }
+
+func TestExtractFencedTOML(t *testing.T) {
+	input := "here\n```toml\n[feed.rule]\nitem = \".item\"\n```\nthere"
+	out, err := extractFencedTOML(input)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(string(out), "[feed.rule]") {
+		t.Errorf("output missing [feed.rule], got %q", out)
+	}
+	if !strings.Contains(string(out), "item = \".item\"") {
+		t.Errorf("output missing item selector, got %q", out)
+	}
+}
+
+func TestExtractFencedTOMLRejectsMissingBlock(t *testing.T) {
+	_, err := extractFencedTOML("no fence")
+	if err == nil {
+		t.Fatal("expected error for missing fenced block")
+	}
+}
