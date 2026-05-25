@@ -265,7 +265,7 @@ func compileRule(raw rawRule, prefix string) (CompiledRule, []error) {
 		rule.Link = link
 	}
 
-	if raw.Description.Selector != "" {
+	if fieldIsSet(raw.Description) {
 		description, err := compileOptionalField(raw.Description, prefix+" description", false)
 		if err != nil {
 			errs = append(errs, err)
@@ -274,7 +274,7 @@ func compileRule(raw rawRule, prefix string) (CompiledRule, []error) {
 		}
 	}
 
-	if raw.PubDate.Selector != "" || raw.PubDate.Format != "" || raw.PubDate.Attr != "" || raw.PubDate.Absolute {
+	if fieldIsSet(raw.PubDate) {
 		pubDate, err := compileOptionalField(raw.PubDate, prefix+" pub_date", true)
 		if err != nil {
 			errs = append(errs, err)
@@ -284,6 +284,10 @@ func compileRule(raw rawRule, prefix string) (CompiledRule, []error) {
 	}
 
 	return rule, errs
+}
+
+func fieldIsSet(raw rawField) bool {
+	return raw.Selector != "" || raw.Attr != "" || raw.Absolute || raw.Format != ""
 }
 
 func compileRequiredField(raw rawField, prefix string) (CompiledField, error) {

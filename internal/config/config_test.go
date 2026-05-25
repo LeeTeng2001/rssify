@@ -45,6 +45,15 @@ absolute = true
 	if cfg.Server.Listen != ":8080" {
 		t.Fatalf("Listen = %q, want :8080", cfg.Server.Listen)
 	}
+	if cfg.Server.CacheDir != "./cache" {
+		t.Fatalf("CacheDir = %q, want ./cache", cfg.Server.CacheDir)
+	}
+	if cfg.Server.UserAgent != "rssify/dev" {
+		t.Fatalf("UserAgent = %q, want rssify/dev", cfg.Server.UserAgent)
+	}
+	if cfg.Server.FetchTimeout != 15*time.Second {
+		t.Fatalf("FetchTimeout = %v, want 15s", cfg.Server.FetchTimeout)
+	}
 	if cfg.Scrape.MaxAttempts != 3 {
 		t.Fatalf("MaxAttempts = %d, want 3", cfg.Scrape.MaxAttempts)
 	}
@@ -61,6 +70,37 @@ absolute = true
 	}
 	if feed.Rule.Item == nil || feed.Rule.Title.Selector == nil || feed.Rule.Link.Selector == nil {
 		t.Fatalf("expected selectors to be compiled: %#v", feed.Rule)
+	}
+}
+
+func TestLoadRejectsFormatOnNonPubDateFieldWithoutSelector(t *testing.T) {
+	path := writeConfig(t, `
+[[feed]]
+id = "hn"
+url = "https://news.ycombinator.com/"
+title = "Hacker News"
+interval = "5m"
+
+[feed.rule]
+item = ".athing"
+
+[feed.rule.title]
+selector = ".titleline > a"
+
+[feed.rule.link]
+selector = ".titleline > a"
+attr = "href"
+
+[feed.rule.description]
+format = "2006-01-02"
+`)
+
+	_, err := Load(path)
+	if err == nil {
+		t.Fatal("expected validation error")
+	}
+	if !strings.Contains(err.Error(), "description format") {
+		t.Fatalf("error %q missing description format", err)
 	}
 }
 
