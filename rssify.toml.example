@@ -1,0 +1,33 @@
+[server]
+listen = ":8080"
+cache_dir = "./cache"
+user_agent = "rssify/dev"
+fetch_timeout = "15s"
+
+[scrape]
+max_attempts = 3
+retry_backoff = "30s"
+
+# Optional, only used by `rssify probe --suggest`.
+# [ai]
+# base_url = "https://api.openai.com/v1"
+# api_key = "$OPENAI_API_KEY"
+# model = "gpt-4o-mini"
+
+[[feed]]
+id = "hn"
+url = "https://news.ycombinator.com/"
+title = "Hacker News"
+description = "Hacker News front page"
+interval = "10m"
+
+[feed.rule]
+item = "tr.athing"
+
+[feed.rule.title]
+selector = "span.titleline > a"
+
+[feed.rule.link]
+selector = "span.titleline > a"
+attr = "href"
+absolute = true
