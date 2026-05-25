@@ -212,7 +212,29 @@ func runSuggest(ctx context.Context, c *cli.Command) error {
 		}
 
 		fmt.Fprintf(c.ErrWriter, "%s\n", ruleText)
-		return outputExtracted(c.Writer, c.ErrWriter, c.Bool("json"), c.Int("limit"), body, finalURL, rule)
+		if err := outputExtracted(c.Writer, c.ErrWriter, c.Bool("json"), 5, body, finalURL, rule); err != nil {
+			return err
+		}
+	promptLoop:
+		for {
+			fmt.Fprintf(c.ErrWriter, "Type 'a' to accept, 'r <feedback>' to refine, or 'q' to quit: ")
+			line := readLine(os.Stdin)
+			switch {
+			case line == "a":
+				return nil
+			case line == "q":
+				return errors.New("quit")
+			case strings.HasPrefix(line, "r "):
+				feedback := strings.TrimPrefix(line, "r ")
+				msgs = append(msgs,
+					ai.Message{Role: "assistant", Content: result},
+					ai.Message{Role: "user", Content: feedback},
+				)
+				break promptLoop
+			default:
+				fmt.Fprintf(c.ErrWriter, "unknown command\n")
+			}
+		}
 	}
 }
 
