@@ -1,0 +1,8 @@
+docs/
+testdata/
+*.md
+.git/
+.github/
+rssify.toml
+rssify.toml.example
+cache/
